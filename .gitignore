@@ -14,3 +14,4 @@
 .idea/**/shelf
 # Private
 /config.py
+/tickets.db
