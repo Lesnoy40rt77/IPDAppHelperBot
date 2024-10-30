@@ -1,7 +1,5 @@
 # Python libs imports
-import email
-
-import telebot, smtplib, uuid, sqlite3, imaplib, time, re, threading
+import telebot, smtplib, uuid, sqlite3, imaplib, time, re, email, threading
 from email.header import decode_header
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -133,6 +131,25 @@ def check_mail():
             if isinstance(subject, bytes):
                 subject = subject.decode(encoding or 'utf-8')
             body = ""
+
+            # Checking if the ticket was closed from the support side
+            if "CLOSE_TICKET" in subject:
+                # Getting UUID from the subject
+                ticket_id_match = re.search(r'#([a-f0-9]{8})', subject)
+                if ticket_id_match:
+                    ticket_id = ticket_id_match.group(1)
+                    # closing the ticket in DB
+                    cursor.execute("UPDATE tickets SET status = 'closed' WHERE id = ?", (ticket_id,))
+                    conn.commit()
+                    print(f"Ticket #{ticket_id} closed from support side")
+
+                    # Notifying the user about his ticket being closed
+                    cursor.execute("SELECT user_id FROM tickets WHERE id = ?", (ticket_id,))
+                    result = cursor.fetchone()
+                    if result:
+                        user_id = result[0]
+                        bot.send_message(user_id, f"Ваш тикет #{ticket_id} был закрыт поддержкой.")
+                    continue
 
             # Pulling out the body
             if msg.is_multipart():
