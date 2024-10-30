@@ -1,10 +1,14 @@
 # Python libs imports
-import telebot, smtplib, uuid, sqlite3
+import email
+
+import telebot, smtplib, uuid, sqlite3, imaplib, time, re, threading
+from email.header import decode_header
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 # Custom imports
-from config import TOKEN, SMTP_SRV, SMTP_PORT, SENDER, SENDER_PWD, RECIPIENT
+from config import TOKEN, SMTP_SRV, SMTP_PORT, SENDER, SENDER_PWD, RECIPIENT, IMAP
+
 bot = telebot.TeleBot(TOKEN)
 
 # Connection to database
@@ -107,4 +111,80 @@ def send_email(subject, body):
         return False
 
 
+# Checking the mail for replies on open tickets
+def check_mail():
+    try:
+        # connecting to IMAP
+        mail = imaplib.IMAP4_SSL(IMAP)
+        mail.login(SENDER, SENDER_PWD)
+        mail.select("inbox")
+
+        # searching for unread
+        status, messages = mail.search(None, 'UNSEEN')
+        mail_ids = messages[0].split()
+
+        for mail_id in mail_ids:
+            # Receiving and parsing the letter
+            status, data = mail.fetch(mail_id, '(RFC822)')
+            msg = email.message_from_bytes(data[0][1])
+
+            # Recieving the subject of letter
+            subject, encoding = decode_header(msg["Subject"])[0]
+            if isinstance(subject, bytes):
+                subject = subject.decode(encoding or 'utf-8')
+            body = ""
+
+            # Pulling out the body
+            if msg.is_multipart():
+                for part in msg.walk():
+                    content_type = part.get_content_type()
+                    content_disposition = str(part.get("Content-Disposition"))
+
+                    if content_type == "text/plain" and "attachment" not in content_disposition:
+                        body = part.get_payload(decode=True).decode()
+            else:
+                body = msg.get_payload(decode=True).decode()
+
+            # Getting UUID of the ticket from the subject (supposedly UUID is an 8-symbol code)
+            ticket_id_match = re.search(r'#([a-f0-9]{8})', subject)
+            if not ticket_id_match:
+                print("UUID of the ticket is not found in the subject")
+                continue
+
+            ticket_id = ticket_id_match.group(1)  # Pulling UUID without "#"
+            print(f"UUID found: {ticket_id}")
+
+            # Searching for user_id in DB based on UUID of ticket
+            cursor.execute("SELECT user_id FROM tickets WHERE id = ? AND status = 'open'", (ticket_id,))
+            result = cursor.fetchone()
+
+            if result:
+                user_id = result[0]
+                # re-sending the message to user_id in Telegram
+                bot.send_message(user_id, f"Новое сообщение по Вашему тикету {ticket_id}\nТема: {subject}\n\n{body}")
+                print(f"Message sent to {user_id}")
+            else:
+                print(f"Ticket with UUID {ticket_id} is not found or is closed")
+
+            # Marking the E-Mail as "Read"
+            mail.store(mail_id, '+FLAGS', '\\Seen')
+
+        # closing connection with IMAP
+        mail.close()
+        mail.logout()
+    except Exception as e:
+        print(f"Error while checking mail: {e}")
+
+
+# cycling through mail every 60 seconds
+def mail_check_loop():
+    while True:
+        check_mail()
+        time.sleep(60)
+
+
+mail_check_thread = threading.Thread(target=mail_check_loop)
+mail_check_thread.start()
+
+# starting the bot
 bot.polling(none_stop=True)
