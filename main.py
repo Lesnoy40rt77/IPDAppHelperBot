@@ -6,6 +6,7 @@ from email.mime.multipart import MIMEMultipart
 
 # Custom imports
 from config import TOKEN, SMTP_SRV, SMTP_PORT, SENDER, SENDER_PWD, RECIPIENT, IMAP
+from custom_texts import START, INFO
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -24,6 +25,18 @@ CREATE TABLE IF NOT EXISTS tickets (
 )
 ''')
 conn.commit()
+
+
+# Start command
+@bot.message_handler(commands=['start'])
+def startmessage(message):
+    bot.send_message(message.chat.id, START)
+
+
+# Info command
+@bot.message_handler(commands=['info'])
+def infomessage(message):
+    bot.send_message(message.chat.id, INFO)
 
 
 # Open new ticket
@@ -54,6 +67,23 @@ def create_ticket(message):
     send_email(f"Ticket #{ticket_id} открыт", f"User ID: {user_id}\nProblem: {problem}")
 
 
+# Close ticket
+@bot.message_handler(commands=['closeticket'])
+def close_ticket(message):
+    user_id = message.from_user.id
+    cursor.execute("SELECT id FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
+    ticket = cursor.fetchone()
+
+    if ticket:
+        ticket_id = ticket[0]
+        cursor.execute("UPDATE tickets SET status = 'closed' WHERE id = ?", (ticket_id,))
+        conn.commit()
+        bot.reply_to(message, f"Тикет #{ticket_id} закрыт.")
+        send_email(f"Ticket #{ticket_id} закрыт", f"User ID: {user_id}\nTicket ID: {ticket_id} has been closed.")
+    else:
+        bot.reply_to(message, "У вас нет открытых тикетов.")
+
+
 # New messages in open ticket
 @bot.message_handler(func=lambda message: message.text and not message.text.startswith('/'))
 def add_message_to_ticket(message):
@@ -70,23 +100,6 @@ def add_message_to_ticket(message):
         send_email(f"Update on Ticket #{ticket_id}", f"User ID: {user_id}\nMessage: {message.text}")
     else:
         bot.reply_to(message, "У вас нет открытых тикетов. Откройте новый с помощью команды /ticket.")
-
-
-# Close ticket
-@bot.message_handler(commands=['closeticket'])
-def close_ticket(message):
-    user_id = message.from_user.id
-    cursor.execute("SELECT id FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
-    ticket = cursor.fetchone()
-
-    if ticket:
-        ticket_id = ticket[0]
-        cursor.execute("UPDATE tickets SET status = 'closed' WHERE id = ?", (ticket_id,))
-        conn.commit()
-        bot.reply_to(message, f"Тикет #{ticket_id} закрыт.")
-        send_email(f"Ticket #{ticket_id} закрыт", f"User ID: {user_id}\nTicket ID: {ticket_id} has been closed.")
-    else:
-        bot.reply_to(message, "У вас нет открытых тикетов.")
 
 
 # E-Mail sender
