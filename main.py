@@ -15,9 +15,18 @@ import time
 import uuid
 import os
 
+
 # Custom imports
-from config import TOKEN, SMTP_SRV, SMTP_PORT, SENDER, SENDER_PWD, RECIPIENT, IMAP
 from custom_texts import START, INFO
+
+TOKEN = os.getenv("TOKEN")
+SMTP_SRV = os.getenv("SMTP_SRV")
+SMTP_PORT = os.getenv("SMTP_PORT")
+SENDER = os.getenv("SENDER")
+SENDER_PWD = os.getenv("SENDER_PWD")
+RECIPIENT = os.getenv("RECIPIENT")
+IMAP = os.getenv("IMAP")
+
 
 bot = telebot.TeleBot(TOKEN)
 
