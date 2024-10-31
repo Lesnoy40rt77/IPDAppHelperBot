@@ -73,8 +73,8 @@ def create_ticket(message):
 
     # If not - open a new one
     ticket_id = str(uuid.uuid4())[:8]
-    cursor.execute("INSERT INTO tickets (id, user_id, problem, status) VALUES (?, ?, ?, ?, ?)",
-                   (ticket_id, user_id, problem, 'open', problem))
+    cursor.execute("INSERT INTO tickets (id, user_id, problem, status) VALUES (?, ?, ?, ?)",
+                   (ticket_id, user_id, problem, 'open'))
     conn.commit()
 
     bot.reply_to(message, f"Тикет создан! Ваш ID: {ticket_id}")
@@ -99,7 +99,7 @@ def close_ticket(message):
 
 
 # Text messages hadler
-@bot.message_handler(content_types=['text'])
+@bot.message_handler(func=lambda message: message.content_type == 'text' and not message.text.startswith('/'))
 def handle_text(message):
     # Checking for open tickets
     user_id = message.from_user.id
