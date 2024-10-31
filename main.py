@@ -1,14 +1,29 @@
 # Python libs imports
-import telebot, smtplib, uuid, sqlite3, imaplib, time, re, email, threading
 from email.header import decode_header
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+
+import email
+import imaplib
+import re
+import smtplib
+import sqlite3
+import telebot
+import threading
+import time
+import uuid
+import os
 
 # Custom imports
 from config import TOKEN, SMTP_SRV, SMTP_PORT, SENDER, SENDER_PWD, RECIPIENT, IMAP
 from custom_texts import START, INFO
 
 bot = telebot.TeleBot(TOKEN)
+
+# Directory for files
+UPLOAD_DIR = 'uploads'
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Connection to database
 conn = sqlite3.connect('tickets.db', check_same_thread=False)
@@ -20,8 +35,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     id TEXT PRIMARY KEY,
     user_id INTEGER,
     problem TEXT,
-    status TEXT,
-    history TEXT
+    status TEXT
 )
 ''')
 conn.commit()
@@ -29,13 +43,13 @@ conn.commit()
 
 # Start command
 @bot.message_handler(commands=['start'])
-def startmessage(message):
+def start_message(message):
     bot.send_message(message.chat.id, START)
 
 
 # Info command
 @bot.message_handler(commands=['info'])
-def infomessage(message):
+def info_message(message):
     bot.send_message(message.chat.id, INFO)
 
 
@@ -59,7 +73,7 @@ def create_ticket(message):
 
     # If not - open a new one
     ticket_id = str(uuid.uuid4())[:8]
-    cursor.execute("INSERT INTO tickets (id, user_id, problem, status, history) VALUES (?, ?, ?, ?, ?)",
+    cursor.execute("INSERT INTO tickets (id, user_id, problem, status) VALUES (?, ?, ?, ?, ?)",
                    (ticket_id, user_id, problem, 'open', problem))
     conn.commit()
 
@@ -84,22 +98,99 @@ def close_ticket(message):
         bot.reply_to(message, "У вас нет открытых тикетов.")
 
 
-# New messages in open ticket
-@bot.message_handler(func=lambda message: message.text and not message.text.startswith('/'))
-def add_message_to_ticket(message):
+# Text messages hadler
+@bot.message_handler(content_types=['text'])
+def handle_text(message):
+    # Checking for open tickets
     user_id = message.from_user.id
-    cursor.execute("SELECT id, history FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
+    cursor.execute("SELECT id FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
     ticket = cursor.fetchone()
 
-    if ticket:
-        ticket_id, history = ticket
-        new_history = history + f"\nUser:{message.text}"
-        cursor.execute("UPDATE tickets SET history = ? WHERE id = ?", (new_history, ticket_id))
-        conn.commit()
-        bot.reply_to(message, "Сообщение добавлено к тикету.")
-        send_email(f"Update on Ticket #{ticket_id}", f"User ID: {user_id}\nMessage: {message.text}")
-    else:
+    if not ticket:
         bot.reply_to(message, "У вас нет открытых тикетов. Откройте новый с помощью команды /ticket.")
+        return
+
+    text_content = message.text
+    ticket_id = ticket[0]
+    bot.reply_to(message, "Текстовое сообщение добавлено к тикету.")
+    send_email(f"Update on Ticket #{ticket_id}", f"User ID: {user_id}\nMessage: {text_content}")
+
+
+# Documents handler
+@bot.message_handler(content_types=['document'])
+def handle_document(message):
+    # Checking for open tickets
+    user_id = message.from_user.id
+    cursor.execute("SELECT id FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
+    ticket = cursor.fetchone()
+
+    if not ticket:
+        bot.reply_to(message, "У вас нет открытых тикетов. Откройте новый с помощью команды /ticket.")
+        return
+
+    # List of files for attachments
+    attachments = []
+    text_content = message.caption if message.caption else "No additional information"
+
+    # Saving document
+    file_info = bot.get_file(message.document.file_id)
+    download_file = bot.download_file(file_info.file_path)
+    file_path = os.path.join(UPLOAD_DIR, message.document.file_name)
+
+    # Save file and add path to list
+    with open(file_path, 'wb') as f:
+        f.write(download_file)
+    attachments.append(file_path)
+
+    # Send to E-Mail
+    ticket_id = ticket[0]
+    if send_email_with_attachments(f"Update on Ticket #{ticket_id}", f"User ID: {user_id}\nMessage: {text_content}",
+                                   attachments):
+        bot.reply_to(message, "Ваш документ прикреплён к тикету.")
+    else:
+        bot.reply_to(message, "Ошибка отправки. Попробуйте ещё раз или свяжитесь с администратором.")
+        print(f"File sending failed: {file_path}, {user_id}")
+
+    # Clean directory
+    clean_upload_dir()
+
+
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
+    # Checking for open tickets
+    user_id = message.from_user.id
+    cursor.execute("SELECT id FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
+    ticket = cursor.fetchone()
+
+    if not ticket:
+        bot.reply_to(message, "У вас нет открытых тикетов. Откройте новый с помощью команды /ticket.")
+        return
+
+    # List of files for attachments
+    attachments = []
+    text_content = message.caption if message.caption else "No additional information"
+
+    # Get photo
+    file_info = bot.get_file(message.photo[-1].file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+    file_path = os.path.join(UPLOAD_DIR, f"{message.photo[-1].file_id}.jpg")
+
+    # Save photo and add path to list
+    with open(file_path, 'wb') as f:
+        f.write(downloaded_file)
+    attachments.append(file_path)
+
+    # Send to E-Mail
+    ticket_id = ticket[0]
+    if send_email_with_attachments(f"Update on Ticket #{ticket_id}", f"User ID: {user_id}\nMessage: {text_content}",
+                                   attachments):
+        bot.reply_to(message, "Ваш документ прикреплён к тикету.")
+    else:
+        bot.reply_to(message, "Ошибка отправки. Попробуйте ещё раз или свяжитесь с администратором.")
+        print(f"File sending failed: {file_path}, {user_id}")
+
+    # Clean directory
+    clean_upload_dir()
 
 
 # E-Mail sender
@@ -119,6 +210,34 @@ def send_email(subject, body):
         return True
     except Exception as e:
         print(f"Exception while sending message: {e}")
+        return False
+
+
+# E-Mail with attachments sender
+def send_email_with_attachments(subject, body, attachments):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SENDER
+        msg['To'] = RECIPIENT
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Add all files as attachments
+        for file_path in attachments:
+            with open(file_path, 'rb') as f:
+                part = MIMEApplication(f.read(), Name=os.path.basename(file_path))
+                part['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
+                msg.attach(part)
+
+        # Send the mail
+        with smtplib.SMTP(SMTP_SRV, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SENDER, SENDER_PWD)
+            server.sendmail(SENDER, RECIPIENT, msg.as_string())
+
+        return True
+    except Exception as e:
+        print(f"Error in sending mail with attachment: {e}")
         return False
 
 
@@ -206,15 +325,26 @@ def check_mail():
         print(f"Error while checking mail: {e}")
 
 
-# cycling through mail every 60 seconds
+# Cycling through mail every 60 seconds
 def mail_check_loop():
     while True:
         check_mail()
         time.sleep(60)
 
 
+# Directory cleaning func
+def clean_upload_dir():
+    for filename in os.listdir(UPLOAD_DIR):
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        try:
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            print(f"Cannot delete file {file_path}: {e}")
+
+
 mail_check_thread = threading.Thread(target=mail_check_loop)
 mail_check_thread.start()
 
-# starting the bot
+# Starting the bot
 bot.polling(none_stop=True)
