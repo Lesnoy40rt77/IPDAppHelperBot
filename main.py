@@ -52,7 +52,7 @@ cursor = conn.cursor()
 # If table not exists
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS tickets (
-    id SERIAL PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
     problem TEXT,
     status TEXT
