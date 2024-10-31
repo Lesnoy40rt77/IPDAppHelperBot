@@ -3,6 +3,7 @@ from email.header import decode_header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 import email
 import imaplib
@@ -164,6 +165,7 @@ def handle_document(message):
     clean_upload_dir()
 
 
+# Code for handling messages, containing photos
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     # Checking for open tickets
@@ -208,9 +210,39 @@ def unknown_command(message):
     bot.reply_to(message, "Неизвестная команда. Список команд: /info")
 
 
+# Exception handler for unknown file types
 @bot.message_handler(content_types=['audio', 'video', 'voice', 'sticker', 'location', 'contact'])
 def unsupported_file_type(message):
     bot.reply_to(message, "Неверный формат файла. Доступные форматы: фото, документ")
+
+
+# Button response handler
+@bot.callback_query_handler(func=lambda call: call.data.startswith("close_ticket_"))
+def handle_close_ticket_callback(call):
+    ticket_id = call.data.split("_")[2]  # Get ticket ID from callback_data
+
+    # Close ticket in DB
+    cursor.execute("UPDATE tickets SET status = 'closed' WHERE id =?", (ticket_id,))
+    conn.commit()
+
+    # Notify user if success
+    bot.send_message(call.message.chat.id, f"Тикет #{ticket_id} закрыт.")
+
+    # Update ticket log
+    user_id = call.message.chat.id
+    send_email(f"Ticket #{ticket_id} закрыт", f"User ID: {user_id}\nTicket ID: {ticket_id} has been closed.")
+
+
+# Button "close ticket" func
+def close_ticket_button(user_id, ticket_id, subject, body):
+    # Make button
+    markup = InlineKeyboardMarkup()
+    close_button = InlineKeyboardButton("Закрыть тикет", callback_data=f"close_ticket_{ticket_id}")
+    markup.add(close_button)
+
+    # Send message with made button
+    message_text = f"Новое сообщение по Вашему тикету {ticket_id}\nТема: {subject}\n\n{body}"
+    bot.send_message(user_id, message_text, reply_markup=markup)
 
 
 # E-Mail sender
@@ -330,7 +362,7 @@ def check_mail():
             if result:
                 user_id = result[0]
                 # re-sending the message to user_id in Telegram
-                bot.send_message(user_id, f"Новое сообщение по Вашему тикету {ticket_id}\nТема: {subject}\n\n{body}")
+                close_ticket_button(user_id, ticket_id, subject, body)
                 print(f"Message sent to {user_id}")
             else:
                 print(f"Ticket with UUID {ticket_id} is not found or is closed")
