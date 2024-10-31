@@ -84,7 +84,7 @@ def create_ticket(message):
         return
 
     # Check if ticket already there
-    cursor.execute("SELECT id FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
+    cursor.execute("SELECT id FROM tickets WHERE user_id = %s AND status = 'open'", (user_id,))
     open_ticket = cursor.fetchone()
     if open_ticket:
         bot.reply_to(message,
@@ -93,7 +93,7 @@ def create_ticket(message):
 
     # If not - open a new one
     ticket_id = str(uuid.uuid4())[:8]
-    cursor.execute("INSERT INTO tickets (id, user_id, problem, status) VALUES (?, ?, ?, ?)",
+    cursor.execute("INSERT INTO tickets (id, user_id, problem, status) VALUES (%s, %s, %s, %s)",
                    (ticket_id, user_id, problem, 'open'))
     conn.commit()
 
@@ -105,12 +105,12 @@ def create_ticket(message):
 @bot.message_handler(commands=['closeticket'])
 def close_ticket(message):
     user_id = message.from_user.id
-    cursor.execute("SELECT id FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
+    cursor.execute("SELECT id FROM tickets WHERE user_id = %s AND status = 'open'", (user_id,))
     ticket = cursor.fetchone()
 
     if ticket:
         ticket_id = ticket[0]
-        cursor.execute("UPDATE tickets SET status = 'closed' WHERE id = ?", (ticket_id,))
+        cursor.execute("UPDATE tickets SET status = 'closed' WHERE id = %s", (ticket_id,))
         conn.commit()
         bot.reply_to(message, f"Тикет #{ticket_id} закрыт.")
         send_email(f"Ticket #{ticket_id} закрыт", f"User ID: {user_id}\nTicket ID: {ticket_id} has been closed.")
@@ -123,7 +123,7 @@ def close_ticket(message):
 def handle_text(message):
     # Checking for open tickets
     user_id = message.from_user.id
-    cursor.execute("SELECT id FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
+    cursor.execute("SELECT id FROM tickets WHERE user_id = %s AND status = 'open'", (user_id,))
     ticket = cursor.fetchone()
 
     if not ticket:
@@ -141,7 +141,7 @@ def handle_text(message):
 def handle_document(message):
     # Checking for open tickets
     user_id = message.from_user.id
-    cursor.execute("SELECT id FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
+    cursor.execute("SELECT id FROM tickets WHERE user_id = %s AND status = 'open'", (user_id,))
     ticket = cursor.fetchone()
 
     if not ticket:
@@ -180,7 +180,7 @@ def handle_document(message):
 def handle_photo(message):
     # Checking for open tickets
     user_id = message.from_user.id
-    cursor.execute("SELECT id FROM tickets WHERE user_id = ? AND status = 'open'", (user_id,))
+    cursor.execute("SELECT id FROM tickets WHERE user_id = %s AND status = 'open'", (user_id,))
     ticket = cursor.fetchone()
 
     if not ticket:
@@ -232,7 +232,7 @@ def handle_close_ticket_callback(call):
     ticket_id = call.data.split("_")[2]  # Get ticket ID from callback_data
 
     # Close ticket in DB
-    cursor.execute("UPDATE tickets SET status = 'closed' WHERE id =?", (ticket_id,))
+    cursor.execute("UPDATE tickets SET status = 'closed' WHERE id =%s", (ticket_id,))
     conn.commit()
 
     # Notify user if success
@@ -333,12 +333,12 @@ def check_mail():
                 if ticket_id_match:
                     ticket_id = ticket_id_match.group(1)
                     # closing the ticket in DB
-                    cursor.execute("UPDATE tickets SET status = 'closed' WHERE id = ?", (ticket_id,))
+                    cursor.execute("UPDATE tickets SET status = 'closed' WHERE id = %s", (ticket_id,))
                     conn.commit()
                     print(f"Ticket #{ticket_id} closed from support side")
 
                     # Notifying the user about his ticket being closed
-                    cursor.execute("SELECT user_id FROM tickets WHERE id = ?", (ticket_id,))
+                    cursor.execute("SELECT user_id FROM tickets WHERE id = %s", (ticket_id,))
                     result = cursor.fetchone()
                     if result:
                         user_id = result[0]
@@ -366,7 +366,7 @@ def check_mail():
             print(f"UUID found: {ticket_id}")
 
             # Searching for user_id in DB based on UUID of ticket
-            cursor.execute("SELECT user_id FROM tickets WHERE id = ? AND status = 'open'", (ticket_id,))
+            cursor.execute("SELECT user_id FROM tickets WHERE id = %s AND status = 'open'", (ticket_id,))
             result = cursor.fetchone()
 
             if result:
