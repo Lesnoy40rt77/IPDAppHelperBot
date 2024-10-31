@@ -4,12 +4,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from urllib.parse import urlparse
 
 import email
 import imaplib
 import re
 import smtplib
-import sqlite3
+import psycopg2
 import telebot
 import threading
 import time
@@ -28,6 +29,9 @@ SENDER_PWD = os.getenv("SENDER_PWD")
 RECIPIENT = os.getenv("RECIPIENT")
 IMAP = os.getenv("IMAP")
 
+DATABASE_URL = os.environ['DATABASE_URL']
+url = urlparse(DATABASE_URL)
+
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -36,14 +40,20 @@ UPLOAD_DIR = 'uploads'
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Connection to database
-conn = sqlite3.connect('tickets.db', check_same_thread=False)
+conn = psycopg2.connect(
+    dbname=url.path[1:],
+    user=url.username,
+    password=url.password,
+    host=url.hostname,
+    port=url.port
+)
 cursor = conn.cursor()
 
 # If table not exists
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS tickets (
-    id TEXT PRIMARY KEY,
-    user_id INTEGER,
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
     problem TEXT,
     status TEXT
 )
