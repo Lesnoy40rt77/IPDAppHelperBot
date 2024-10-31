@@ -193,6 +193,17 @@ def handle_photo(message):
     clean_upload_dir()
 
 
+# Unknown command
+@bot.message_handler(func=lambda message: message.text.startswith('/'))
+def unknown_command(message):
+    bot.reply_to(message, "Неизвестная команда. Список команд: /info")
+
+
+@bot.message_handler(content_types=['audio', 'video', 'voice', 'sticker', 'location', 'contact'])
+def unsupported_file_type(message):
+    bot.reply_to(message, "Неверный формат файла. Доступные форматы: фото, документ")
+
+
 # E-Mail sender
 def send_email(subject, body):
     try:
