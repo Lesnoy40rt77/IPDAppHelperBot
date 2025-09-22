@@ -48,33 +48,33 @@
    cd IPDAppHelperBot
    ```
 2. Создай и активируй виртуальное окружение:
-  ```bash
-  python -m venv .venv
-  source .venv/bin/activate      # Windows: .venv\Scripts\activate
-  ```
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate      # Windows: .venv\Scripts\activate
+   ```
 3. Установи зависимости:
-  ```bash
-  pip install -r requirements.txt
-  ```
+   ```bash
+   pip install -r requirements.txt
+   ```
 4. Экспортируй токен бота:
-  ```bash
-  export TELEGRAM_BOT_TOKEN=123456:ABC...
-  # Windows PowerShell:
-  # $env:TELEGRAM_BOT_TOKEN="123456:ABC..."
-  ```
+   ```bash
+   export TELEGRAM_BOT_TOKEN=123456:ABC...
+   # Windows PowerShell:
+   # $env:TELEGRAM_BOT_TOKEN="123456:ABC..."
+   ```
 5. Запусти:
-  ```bash
-  python main.py
-  ```
+   ```bash
+   python main.py
+   ```
 ---
 
 ## 🔑 Настройка окружения
 
 Рекомендуется хранить секреты в файле `.env` (и добавить его в `.gitignore`):
 
-```env
-TELEGRAM_BOT_TOKEN=123456:ABCDEF...
-```
+  ```env
+  TELEGRAM_BOT_TOKEN=123456:ABCDEF...
+  ```
 ## ☁️ Деплой
 
 ### Heroku / Railway
@@ -98,21 +98,21 @@ TELEGRAM_BOT_TOKEN=123456:ABCDEF...
 4. Настрой systemd-юнит или supervisor для автозапуска.
 
 Пример systemd-юнита:
-```ini
-[Unit]
-Description=IPDAppHelperBot
-After=network.target
+  ```ini
+  [Unit]
+  Description=IPDAppHelperBot
+  After=network.target
 
-[Service]
-User=botuser
-WorkingDirectory=/home/botuser/IPDAppHelperBot
-Environment="TELEGRAM_BOT_TOKEN=123456:ABC..."
-ExecStart=/home/botuser/IPDAppHelperBot/.venv/bin/python main.py
-Restart=always
+  [Service]
+  User=botuser
+  WorkingDirectory=/home/botuser/IPDAppHelperBot
+  Environment="TELEGRAM_BOT_TOKEN=123456:ABC..."
+  ExecStart=/home/botuser/IPDAppHelperBot/.venv/bin/python main.py
+  Restart=always
 
-[Install]
-WantedBy=multi-user.target
-```
+  [Install]
+  WantedBy=multi-user.target
+  ```
 
 ## 🛠️ Логи и диагностика
 
